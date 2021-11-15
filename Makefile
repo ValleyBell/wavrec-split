@@ -5,5 +5,5 @@ LDFLAGS := -lm
 
 default:	wavrec-split
 
-wavrec-split:	MultiWaveFile.cpp MultiWaveFile.hpp wavrec-split.cpp
+wavrec-split:	$(wildcard *.cpp *.hpp *.h)
 	$(CXX) $(CFLAGS) $^ $(LDFLAGS) -o $@

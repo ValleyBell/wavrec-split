@@ -77,10 +77,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="func-detect.cpp" />
+    <ClCompile Include="func-magstat.cpp" />
     <ClCompile Include="MultiWaveFile.cpp" />
     <ClCompile Include="wavrec-split.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="func.hpp" />
     <ClInclude Include="libs\CLI11.hpp" />
     <ClInclude Include="MultiWaveFile.hpp" />
   </ItemGroup>
