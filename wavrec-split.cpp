@@ -36,13 +36,12 @@
 // --- utility functions functions ---
 INLINE INT16 ReadLE16s(const UINT8* data);
 INLINE void WriteLE16s(UINT8* data, INT16 value);
-INLINE UINT32 ReadLE24(const UINT8* data);
 INLINE INT32 ReadLE24s(const UINT8* data);
 INLINE void WriteLE24s(UINT8* data, INT32 value);
 static std::vector<std::string> ReadFileIntoStrVector(const std::string& fileName);
 static UINT8 TimeStr2Sample(const char* time, UINT32 sampleRate, UINT64* result);
 // --- main functions ---
-static UINT8 DoMagnitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplDurat);
+static UINT8 DoMagnitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplDurat, UINT32 interval);
 
 
 int main(int argc, char* argv[])
@@ -50,6 +49,7 @@ int main(int argc, char* argv[])
 	CLI::App cliApp{"Wave Splitter"};
 	std::string tStart;
 	std::string tLen;
+	UINT32 tDelta = 0;
 	std::vector<std::string> wavFileNames;
 	std::string wavFileList;
 	std::string splitFileName;
@@ -62,12 +62,13 @@ int main(int argc, char* argv[])
 	cliApp.require_subcommand();
 	
 	CLI::App* scMag = cliApp.add_subcommand("magstat", "magnitude statistics");
-	scMag->add_option("-s, --start", tStart, "Start Time in [HH:]MM:ss or sample number (plain integer)");
-	scMag->add_option("-t, --length", tLen, "Length in [HH:]MM:ss or number of samples");
 	optFile = scMag->add_option("-f, --file", wavFileNames, "WAV file")->check(CLI::ExistingFile);
 	optList = scMag->add_option("-l, --list", wavFileList, "TXT file that lists WAVs")->check(CLI::ExistingFile);
 	optFile->excludes(optList);
 	optList->excludes(optFile);
+	scMag->add_option("-s, --start", tStart, "Start Time in [HH:]MM:ss or sample number (plain integer)");
+	scMag->add_option("-t, --length", tLen, "Length in [HH:]MM:ss or number of samples");
+	scMag->add_option("-i, --interval", tDelta, "Measurement interval, number of samples");
 	
 	CLI::App* scDetect = cliApp.add_subcommand("detect", "detect split points");
 	optFile = scDetect->add_option("-f, --file", wavFileNames, "WAV file")->check(CLI::ExistingFile);
@@ -129,7 +130,7 @@ int main(int argc, char* argv[])
 			return 1;
 		}
 		
-		return DoMagnitudeStats(mwf, smplStart, smplDurat);
+		return DoMagnitudeStats(mwf, smplStart, smplDurat, tDelta);
 	}
 	else if (cliApp.got_subcommand(scDetect))
 	{
@@ -156,11 +157,6 @@ INLINE void WriteLE16s(UINT8* data, INT16 value)
 	return;
 }
 
-INLINE UINT32 ReadLE24(const UINT8* data)
-{
-	return (data[0x02] << 16) | (data[0x01] <<  8) | (data[0x00] <<  0);
-}
-
 INLINE INT32 ReadLE24s(const UINT8* data)
 {
 	return ((INT8)data[0x02] << 16) | (data[0x01] <<  8) | (data[0x00] <<  0);
@@ -172,6 +168,12 @@ INLINE void WriteLE24s(UINT8* data, INT32 value)
 	data[0x01] = (value >>  8) & 0xFF;
 	data[0x02] = (value >> 16) & 0xFF;
 	return;
+}
+
+INLINE INT32 MaxVal_SampleBits(UINT8 bits)
+{
+	INT32 mask_bm2 = 1 << (bits - 2);
+	return mask_bm2 | (mask_bm2 - 1);	// return (1 << (bits-1)) - 1
 }
 
 static std::vector<std::string> ReadFileIntoStrVector(const std::string& fileName)
@@ -249,8 +251,9 @@ static UINT8 TimeStr2Sample(const char* time, UINT32 sampleRate, UINT64* result)
 }
 
 // --- main functions ---
-static UINT8 DoMagnitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplDurat)
+static UINT8 DoMagnitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplDurat, UINT32 interval)
 {
+	double smplDivide;
 	std::vector<UINT8> smplBuf;
 	size_t smplBufSCnt;	// sample buffer: sample count
 	UINT32 smplSize;
@@ -265,6 +268,7 @@ static UINT8 DoMagnitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplD
 	std::vector< INT32> smplMinVal;
 	std::vector<UINT64> smplMinPos;
 	
+	smplDivide = (double)MaxVal_SampleBits(mwf.GetBitDepth());
 	smplSize = mwf.GetSampleSize();
 	smplRate = mwf.GetSampleRate();
 	chnCnt = mwf.GetChannels();
@@ -272,7 +276,8 @@ static UINT8 DoMagnitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplD
 	smplMaxPos.resize(chnCnt);
 	smplMinVal.resize(chnCnt);
 	smplMinPos.resize(chnCnt);
-	smplBufSCnt = smplRate * 1;	// buffer of 1 second
+	// Note: The buffer size also determines the measurement interval.
+	smplBufSCnt = interval ? interval : (smplRate * 1);	// fallback: buffer of 1 second
 	smplBuf.resize(smplBufSCnt * smplSize);
 	
 	printf("second");
@@ -303,7 +308,7 @@ static UINT8 DoMagnitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplD
 			{
 				for (curChn = 0; curChn < chnCnt; curChn ++)
 				{
-					INT32 smplVal = ReadLE16s(&src[curChn * 2]) << 8;
+					INT32 smplVal = ReadLE16s(&src[curChn * 2]);
 					if (smplVal > smplMaxVal[curChn])
 					{
 						smplMaxVal[curChn] = smplVal;
@@ -337,27 +342,25 @@ static UINT8 DoMagnitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplD
 			}
 			break;
 		}
-		//printf("Second %u: maxVal %d (pos %u), minVal %d (pos %u)\n", (UINT32)(smplPos / smplRate),
-		//	smplMaxVal, smplMaxPos, smplMinVal, smplMinPos);
 #if 0
 		printf("Second %u:\n", (UINT32)(smplPos / smplRate));
 		for (curChn = 0; curChn < chnCnt; curChn ++)
 		{
 			INT32 smplDiff = smplMaxVal[curChn] - smplMinVal[curChn];
-			double dbMin = -6.0 * log(abs(smplMinVal[curChn]) / (double)0x7FFFFF) / M_LN2;
-			double dbMax = -6.0 * log(abs(smplMaxVal[curChn]) / (double)0x7FFFFF) / M_LN2;
-			double dbDiff = -6.0 * log(smplDiff / (double)0x7FFFFF / 2) / M_LN2;
+			double dbMin = 6.0 * log(abs(smplMinVal[curChn]) / smplDivide) / M_LN2;
+			double dbMax = 6.0 * log(abs(smplMaxVal[curChn]) / smplDivide) / M_LN2;
+			double dbDiff = 6.0 * log(smplDiff / smplDivide / 2) / M_LN2;
 			printf("    Ch %u: [%d, %d] diff %d = [%.5f db, %.5f db] diff %.5f db\n", curChn,
 				smplMinVal[curChn], smplMaxVal[curChn], smplDiff, dbMin, dbMax, dbDiff);
 		}
 #else
-		printf("%u", (UINT32)(smplPos / smplRate));
+		printf("%.3f", (double)smplPos / smplRate);
 		for (curChn = 0; curChn < chnCnt; curChn ++)
 		{
 			INT32 smplDiff = smplMaxVal[curChn] - smplMinVal[curChn];
-			double dbMin = -6.0 * log(abs(smplMinVal[curChn]) / (double)0x7FFFFF) / M_LN2;
-			double dbMax = -6.0 * log(abs(smplMaxVal[curChn]) / (double)0x7FFFFF) / M_LN2;
-			double dbDiff = -6.0 * log(smplDiff / (double)0x7FFFFF / 2) / M_LN2;
+			double dbMin = 6.0 * log(abs(smplMinVal[curChn]) / smplDivide) / M_LN2;
+			double dbMax = 6.0 * log(abs(smplMaxVal[curChn]) / smplDivide) / M_LN2;
+			double dbDiff = 6.0 * log(smplDiff / smplDivide / 2) / M_LN2;
 			printf("\t%.8f\t%.8f\t%.8f", dbMin, dbMax, dbDiff);
 		}
 		printf("\n");
