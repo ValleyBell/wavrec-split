@@ -75,7 +75,7 @@ int main(int argc, char* argv[])
 	
 	CLI::App* scDetect = cliApp.add_subcommand("detect", "detect split points");
 	CLI_AddInputFileGroup(scDetect, wavFileNames, wavFileList);
-	scDetect->add_option("-s, --split-names", splitFileName, "TXT file that lists files for resulting split list")->check(CLI::ExistingFile)->required();
+	scDetect->add_option("-n, --split-names", splitFileName, "TXT file that lists file names for resulting split list")->check(CLI::ExistingFile)->required();
 	scDetect->add_option("-a, --amp-split", detOpts.ampSplit, "Amplitude for defining splitting silence (<0: db, >0: sample value)");
 	scDetect->add_option("-A, --amp-finetune", detOpts.ampFinetune, "Amplitude for split point finetuning (must be lower than amp-split)");
 	scDetect->add_option("-t, --time", detOpts.tSplit, "Minimum time of silence for splitting files (in seconds)");
@@ -96,12 +96,12 @@ int main(int argc, char* argv[])
 		UINT8 retVal = ReadFileIntoStrVector(wavFileList, wavFileNames);
 		if (retVal & 0x80)
 		{
-			printf("Failed to load WAV list!\n");
+			fprintf(stderr, "Failed to load WAV list!\n");
 			return 1;
 		}
 		else if (wavFileNames.empty())
 		{
-			printf("WAV list is empty!\n");
+			fprintf(stderr, "WAV list is empty!\n");
 			return 2;
 		}
 	}
@@ -113,25 +113,25 @@ int main(int argc, char* argv[])
 		UINT64 smplStart;
 		UINT64 smplDurat;
 		
-		printf("Amplitude Statistics\n");
-		printf("--------------------\n");
+		fprintf(stderr, "Amplitude Statistics\n");
+		fprintf(stderr, "--------------------\n");
 		
 		retVal = mwf.LoadWaveFiles(wavFileNames);
 		if (retVal)
 		{
-			printf("WAVE Loading failed!\n");
+			fprintf(stderr, "WAVE Loading failed!\n");
 			return 3;
 		}
 		if (mwf.GetCompression() != WAVE_FORMAT_PCM)
 		{
-			printf("Unsupported compression type: %u\n", mwf.GetCompression());
-			printf("Only uncompressed PCM is supported.\n");
+			fprintf(stderr, "Unsupported compression type: %u\n", mwf.GetCompression());
+			fprintf(stderr, "Only uncompressed PCM is supported.\n");
 			return 4;
 		}
 		if (! (mwf.GetBitDepth() == 16 || mwf.GetBitDepth() == 24))
 		{
-			printf("Unsupported bit depth: %u\n", mwf.GetBitDepth());
-			printf("Only 16 and 24 bit WAVs are supported.\n");
+			fprintf(stderr, "Unsupported bit depth: %u\n", mwf.GetBitDepth());
+			fprintf(stderr, "Only 16 and 24 bit WAVs are supported.\n");
 			return 4;
 		}
 		
@@ -139,14 +139,14 @@ int main(int argc, char* argv[])
 		retVal = TimeStr2Sample(tStart.c_str(), mwf.GetSampleRate(), &smplStart);
 		if (retVal & 0x80)
 		{
-			printf("Format of Start Time is invalid!\n");
+			fprintf(stderr, "Format of Start Time is invalid!\n");
 			return 1;
 		}
 		smplDurat = mwf.GetTotalSamples();
 		retVal = TimeStr2Sample(tLen.c_str(), mwf.GetSampleRate(), &smplDurat);
 		if (retVal & 0x80)
 		{
-			printf("Format of Length is invalid!\n");
+			fprintf(stderr, "Format of Length is invalid!\n");
 			return 1;
 		}
 		
@@ -161,7 +161,7 @@ int main(int argc, char* argv[])
 		retVal = ReadFileIntoStrVector(splitFileName, splitNames);
 		if (retVal & 0x80)
 		{
-			printf("Failed to load split name list!\n");
+			fprintf(stderr, "Failed to load split name list!\n");
 			return 1;
 		}
 		// An empty list is valid in this case.
@@ -170,30 +170,30 @@ int main(int argc, char* argv[])
 		{
 			if (detOpts.ampFinetune > detOpts.ampSplit)
 			{
-				printf("Error: Finetune amplitude must be smaller than split amplitude!\n");
+				fprintf(stderr, "Error: Finetune amplitude must be smaller than split amplitude!\n");
 				return 1;
 			}
 		}
 		
-		printf("Detect Split Points\n");
-		printf("-------------------\n");
+		fprintf(stderr, "Detect Split Points\n");
+		fprintf(stderr, "-------------------\n");
 		
 		retVal = mwf.LoadWaveFiles(wavFileNames);
 		if (retVal)
 		{
-			printf("WAVE Loading failed!\n");
+			fprintf(stderr, "WAVE Loading failed!\n");
 			return 3;
 		}
 		if (mwf.GetCompression() != WAVE_FORMAT_PCM)
 		{
-			printf("Unsupported compression type: %u\n", mwf.GetCompression());
-			printf("Only uncompressed PCM is supported.\n");
+			fprintf(stderr, "Unsupported compression type: %u\n", mwf.GetCompression());
+			fprintf(stderr, "Only uncompressed PCM is supported.\n");
 			return 4;
 		}
 		if (mwf.GetBitDepth() != 24)
 		{
-			printf("Unsupported bit depth: %u\n", mwf.GetBitDepth());
-			printf("Only 24 bit WAVs are supported.\n");
+			fprintf(stderr, "Unsupported bit depth: %u\n", mwf.GetBitDepth());
+			fprintf(stderr, "Only 24 bit WAVs are supported.\n");
 			return 4;
 		}
 		
@@ -208,12 +208,12 @@ int main(int argc, char* argv[])
 		retVal = ReadFileIntoStrVector(splitFileName, splitNames);
 		if (retVal & 0x80)
 		{
-			printf("Failed to load trim list!\n");
+			fprintf(stderr, "Failed to load trim list!\n");
 			return 1;
 		}
 		else if (splitNames.empty())
 		{
-			printf("Trim list is empty!\n");
+			fprintf(stderr, "Trim list is empty!\n");
 			return 2;
 		}
 		
@@ -227,25 +227,25 @@ int main(int argc, char* argv[])
 				dstPath.push_back('/');
 		}
 		
-		printf("Split Files\n");
-		printf("-----------\n");
+		fprintf(stderr, "Split Files\n");
+		fprintf(stderr, "-----------\n");
 		
 		retVal = mwf.LoadWaveFiles(wavFileNames);
 		if (retVal)
 		{
-			printf("WAVE Loading failed!\n");
+			fprintf(stderr, "WAVE Loading failed!\n");
 			return 3;
 		}
 		if (mwf.GetCompression() != WAVE_FORMAT_PCM)
 		{
-			printf("Unsupported compression type: %u\n", mwf.GetCompression());
-			printf("Only uncompressed PCM is supported.\n");
+			fprintf(stderr, "Unsupported compression type: %u\n", mwf.GetCompression());
+			fprintf(stderr, "Only uncompressed PCM is supported.\n");
 			return 4;
 		}
 		if (! (mwf.GetBitDepth() == 16 || mwf.GetBitDepth() == 24))
 		{
-			printf("Unsupported bit depth: %u\n", mwf.GetBitDepth());
-			printf("Only 16 and 24 bit WAVs are supported.\n");
+			fprintf(stderr, "Unsupported bit depth: %u\n", mwf.GetBitDepth());
+			fprintf(stderr, "Only 16 and 24 bit WAVs are supported.\n");
 			return 4;
 		}
 		
@@ -283,7 +283,7 @@ static UINT8 DoSplitFiles(MultiWaveFile& mwf, const std::vector<std::string>& tl
 		{
 			if (curCol < 4)
 			{
-				printf("Invalid line: %s\n", tLine.c_str());
+				fprintf(stderr, "Invalid line: %s\n", tLine.c_str());
 				continue;
 			}
 			TrimInfo ti;
@@ -318,11 +318,11 @@ static UINT8 DoSplitFiles(MultiWaveFile& mwf, const std::vector<std::string>& tl
 		fullPath = splitOpts.dstPath + ti.fileName;
 		CreateDirTree(GetDirPath(fullPath));
 		
-		printf("Writing %s ...\n", ti.fileName.c_str());
+		fprintf(stderr, "Writing %s ...\n", ti.fileName.c_str());
 		ti.fileName = fullPath;
 		retVal = DoWaveTrim(mwf, ti, trimOpts);
 		if (retVal)
-			printf("Error creating %s!\n", fullPath.c_str());
+			fprintf(stderr, "Error creating %s!\n", fullPath.c_str());
 	}
 	
 	return 0;
@@ -337,7 +337,7 @@ static UINT8 ReadFileIntoStrVector(const std::string& fileName, std::vector<std:
 	hFile = fopen(fileName.c_str(), "rt");
 	if (hFile == NULL)
 	{
-		//printf("Error opening file!\n");
+		//fprintf(stderr, "Error opening file!\n");
 		return 0xFF;
 	}
 	

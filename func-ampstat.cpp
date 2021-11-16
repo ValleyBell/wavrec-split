@@ -50,7 +50,7 @@ int DoAmplitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplDurat, UIN
 	
 	printf("second");
 	for (curChn = 0; curChn < chnCnt; curChn ++)
-		printf("\tsmplMin_%u\tsmplMax_%u\tamplitude_%u", 1 + curChn, 1 + curChn, 1 + curChn);
+		printf("\tsmplDown_%u\tsmplUp_%u\tamplitude_%u", 1 + curChn, 1 + curChn, 1 + curChn);
 	printf("\n");
 	
 	mwf.SetSampleReadOffset(smplStart);
@@ -122,7 +122,10 @@ int DoAmplitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplDurat, UIN
 				smplMinVal[curChn], smplMaxVal[curChn], smplDiff, dbMin, dbMax, dbDiff);
 		}
 #else
-		printf("%.3f", (double)smplPos / smplRate);
+		if ((smplPos % smplRate) == 0)
+			printf("%u", (unsigned)(smplPos / smplRate));
+		else
+			printf("%.2f", (double)smplPos / smplRate);
 		for (curChn = 0; curChn < chnCnt; curChn ++)
 		{
 			INT32 smplDiff = smplMaxVal[curChn] - smplMinVal[curChn];

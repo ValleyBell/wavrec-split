@@ -99,7 +99,7 @@ size_t MultiWaveFile::GetFileFromSample(UINT64 sample)
 	hFile = fopen(fileName.c_str(), "rb");
 	if (hFile == NULL)
 	{
-		printf("Error opening file!\n");
+		fprintf(stderr, "Error opening file!\n");
 		return 0xFF;
 	}
 	
@@ -107,7 +107,7 @@ size_t MultiWaveFile::GetFileFromSample(UINT64 sample)
 	if (memcmp(chnkFCC, "RIFF", 4))
 	{
 		fclose(hFile);
-		printf("Bad file.\n");
+		fprintf(stderr, "Bad file.\n");
 		return 0xF0;
 	}
 	fseek(hFile, 0x08, SEEK_SET);
@@ -115,7 +115,7 @@ size_t MultiWaveFile::GetFileFromSample(UINT64 sample)
 	if (memcmp(chnkFCC, "WAVE", 4))
 	{
 		fclose(hFile);
-		printf("Bad file.\n");
+		fprintf(stderr, "Bad file.\n");
 		return 0xF1;
 	}
 	
@@ -141,13 +141,13 @@ size_t MultiWaveFile::GetFileFromSample(UINT64 sample)
 	if (! (found & 0x01))
 	{
 		fclose(hFile);
-		printf("Format chunk not found.\n");
+		fprintf(stderr, "Format chunk not found.\n");
 		return 0xF2;
 	}
 	if (! (found & 0x02))
 	{
 		fclose(hFile);
-		printf("Data chunk not found.\n");
+		fprintf(stderr, "Data chunk not found.\n");
 		return 0xF3;
 	}
 	
@@ -175,7 +175,7 @@ UINT8 MultiWaveFile::LoadWaveFiles(const std::vector<std::string>& fileList)
 		retVal = MultiWaveFile::LoadSingleWave(wItm.fileName, wItm.wi);
 		if (retVal)
 		{
-			printf("Error 0x%02X opening %s!\n", retVal, fileTitle.c_str());
+			fprintf(stderr, "Error 0x%02X opening %s!\n", retVal, fileTitle.c_str());
 			return retVal;
 		}
 		if (curFile == 0)
@@ -193,7 +193,7 @@ UINT8 MultiWaveFile::LoadWaveFiles(const std::vector<std::string>& fileList)
 				_sampleRate != wItm.wi.format.nSamplesPerSec)
 			{
 				fclose(wItm.wi.hFile);
-				printf("File %s has a different format!\n", fileTitle.c_str());
+				fprintf(stderr, "File %s has a different format!\n", fileTitle.c_str());
 				return 0x80;
 			}
 		}
@@ -210,7 +210,7 @@ UINT8 MultiWaveFile::LoadWaveFiles(const std::vector<std::string>& fileList)
 	_smplOfsFile = 0;
 	
 	std::string duratStr = GetTimeStrHMS(_sampleRate, _totalSamples);
-	printf("Opened %u %s. Format %u, Channels %u, Bits %u, Rate %u, Total Duration: %s\n",
+	fprintf(stderr, "Opened %u %s. Format %u, Channels %u, Bits %u, Rate %u, Total Duration: %s\n",
 		(unsigned)_files.size(), (_files.size() == 1) ? "file" : "files",
 		_compression, _channels, _bitDepth, _sampleRate, duratStr.c_str());
 	

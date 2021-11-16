@@ -31,6 +31,7 @@ INLINE INT32 OptAmplitude2Sample(double optVal, UINT32 maxSmplVal);
 INLINE UINT64 RoundDownToUnit(UINT64 val, UINT64 unit);
 static INT32 GetMaxSample24(const UINT8* buffer, UINT16 chnCnt);
 static std::string GetTimeStrHMS(UINT32 smplRate, UINT64 smplPos);
+static std::string GetTimeStrMS(UINT32 smplRate, UINT64 smplPos);
 
 
 static void FinetuneTrimPoint(MultiWaveFile& mwf, SplitListItem& sli, INT32 silenceVal)
@@ -177,6 +178,7 @@ int DoSplitDetection(MultiWaveFile& mwf, const std::vector<std::string>& fileNam
 	smplBuf.resize(smplRate * 10 * smplSize);	// buffer of 10 seconds
 	
 	// actual song search
+	fprintf(stderr, "Determining split points ...\n");
 	mwf.SetSampleReadOffset(0);
 	splitList.clear();
 	songSmplStart = songSmplEnd = 0;
@@ -222,8 +224,9 @@ int DoSplitDetection(MultiWaveFile& mwf, const std::vector<std::string>& fileNam
 							sli.smplEnd = songSmplEnd;
 							sli.gain = maxSmplVal / (double)smplValRange;
 							sli.fileName = (songID < fileNameList.size()) ? fileNameList[songID] : "";
-							printf("Song %u: %s .. %s %s\n", songID, GetTimeStrHMS(smplRate, sli.smplStart).c_str(),
-								GetTimeStrHMS(smplRate, sli.smplEnd).c_str(), sli.fileName.c_str());
+							printf("Song %u: %s .. %s len %s  %s\n", songID, GetTimeStrHMS(smplRate, sli.smplStart).c_str(),
+								GetTimeStrHMS(smplRate, sli.smplEnd).c_str(),
+								GetTimeStrMS(smplRate, sli.smplEnd - sli.smplStart).c_str(), sli.fileName.c_str());
 							splitList.push_back(sli);
 						}
 					}
@@ -252,6 +255,7 @@ int DoSplitDetection(MultiWaveFile& mwf, const std::vector<std::string>& fileNam
 	}
 	
 	printf("\n");
+	fprintf(stderr, "Finetuning split points and generating trim list ...\n");
 	size_t curFile;
 	for (curFile = 0; curFile < splitList.size(); curFile ++)
 	{
@@ -314,10 +318,20 @@ static INT32 GetMaxSample24(const UINT8* buffer, UINT16 chnCnt)
 static std::string GetTimeStrHMS(UINT32 smplRate, UINT64 smplPos)
 {
 	char timeStr[0x20];
-	UINT32 sec_smpls = (UINT32)(smplPos % (UINT64)smplRate);
-	UINT32 seconds = (UINT32)(smplPos / (UINT64)smplRate);
+	UINT32 sec_smpls = (UINT32)(smplPos % smplRate);
+	UINT32 seconds = (UINT32)(smplPos / smplRate);
 	UINT32 mins = seconds / 60;
 	UINT32 hours = mins / 60;
 	sprintf(timeStr, "%02u:%02u:%02u.%03u", hours, mins % 60, seconds % 60, sec_smpls * 1000 / smplRate);
+	return std::string(timeStr);
+}
+
+static std::string GetTimeStrMS(UINT32 smplRate, UINT64 smplPos)
+{
+	char timeStr[0x20];
+	UINT32 sec_smpls = (UINT32)(smplPos % smplRate);
+	UINT32 seconds = (UINT32)(smplPos / smplRate);
+	UINT32 mins = seconds / 60;
+	sprintf(timeStr, "%02u:%02u.%03u", mins, seconds % 60, sec_smpls * 1000 / smplRate);
 	return std::string(timeStr);
 }
