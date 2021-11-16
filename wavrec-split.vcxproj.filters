@@ -21,13 +21,13 @@
     <ClCompile Include="wavrec-split.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
-    <ClCompile Include="func-magstat.cpp">
-      <Filter>Quelldateien</Filter>
-    </ClCompile>
     <ClCompile Include="func-detect.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
-    <ClCompile Include="func-split.cpp">
+    <ClCompile Include="func-trim.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
+    <ClCompile Include="func-ampstat.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
   </ItemGroup>

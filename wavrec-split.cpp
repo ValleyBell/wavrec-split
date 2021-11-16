@@ -67,7 +67,7 @@ int main(int argc, char* argv[])
 	
 	cliApp.require_subcommand();
 	
-	CLI::App* scMag = cliApp.add_subcommand("magstat", "magnitude statistics");
+	CLI::App* scMag = cliApp.add_subcommand("ampstat", "amplitude statistics");
 	CLI_AddInputFileGroup(scMag, wavFileNames, wavFileList);
 	scMag->add_option("-s, --start", tStart, "Start Time in [HH:]MM:ss or sample number (plain integer)");
 	scMag->add_option("-t, --length", tLen, "Length in [HH:]MM:ss or number of samples");
@@ -113,7 +113,7 @@ int main(int argc, char* argv[])
 		UINT64 smplStart;
 		UINT64 smplDurat;
 		
-		printf("Magnitude Statistics\n");
+		printf("Amplitude Statistics\n");
 		printf("--------------------\n");
 		
 		retVal = mwf.LoadWaveFiles(wavFileNames);
@@ -150,7 +150,7 @@ int main(int argc, char* argv[])
 			return 1;
 		}
 		
-		return DoMagnitudeStats(mwf, smplStart, smplDurat, tDelta);
+		return DoAmplitudeStats(mwf, smplStart, smplDurat, tDelta);
 	}
 	else if (cliApp.got_subcommand(scDetect))
 	{

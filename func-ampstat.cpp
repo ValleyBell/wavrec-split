@@ -19,7 +19,7 @@ INLINE INT32 ReadLE24s(const UINT8* data);
 INLINE INT32 MaxVal_SampleBits(UINT8 bits);
 INLINE double Linear2DB(double scale);
 
-int DoMagnitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplDurat, UINT32 interval)
+int DoAmplitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplDurat, UINT32 interval)
 {
 	double smplDivide;
 	std::vector<UINT8> smplBuf;

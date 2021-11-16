@@ -7,8 +7,8 @@
 
 class MultiWaveFile;
 
-// Magnitude Statistics
-int DoMagnitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplDurat, UINT32 interval);
+// Amplitude Statistics
+int DoAmplitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplDurat, UINT32 interval);
 
 // Split Detection
 struct DetectOpts

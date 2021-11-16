@@ -78,8 +78,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="func-detect.cpp" />
-    <ClCompile Include="func-magstat.cpp" />
-    <ClCompile Include="func-split.cpp" />
+    <ClCompile Include="func-ampstat.cpp" />
+    <ClCompile Include="func-trim.cpp" />
     <ClCompile Include="MultiWaveFile.cpp" />
     <ClCompile Include="wavrec-split.cpp" />
   </ItemGroup>
