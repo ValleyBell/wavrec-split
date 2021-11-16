@@ -2,14 +2,15 @@
 #include <stdio.h>
 #include <vector>
 #include <string>
+#include <algorithm>
 #include <math.h>
 
 #include "stdtype.h"
 #include "MultiWaveFile.hpp"
+#include "func.hpp"
 #include "libs/CLI11.hpp"
 
 #define INLINE	static inline
-
 
 #ifdef _WIN32
 #include <direct.h>	// for _mkdir()
@@ -26,16 +27,20 @@
 #endif
 
 
-// --- utility functions ---
-INLINE INT16 ReadLE16s(const UINT8* data);
-INLINE void WriteLE16s(UINT8* data, INT16 value);
-INLINE INT32 ReadLE24s(const UINT8* data);
-INLINE void WriteLE24s(UINT8* data, INT32 value);
-static std::vector<std::string> ReadFileIntoStrVector(const std::string& fileName);
-static UINT8 TimeStr2Sample(const char* time, UINT32 sampleRate, UINT64* result);
+struct SplitOpts
+{
+	std::string dstPath;
+	UINT32 leadSamples;
+	UINT32 trailSamples;
+};
 
-// --- main functions ---
-#include "func.hpp"
+static UINT8 DoSplitFiles(MultiWaveFile& mwf, const std::vector<std::string>& tlLines, const SplitOpts& splitOpts, const TrimOpts& trimOpts);
+static UINT8 ReadFileIntoStrVector(const std::string& fileName, std::vector<std::string>& result);
+static UINT8 TimeStr2Sample(const char* time, UINT32 sampleRate, UINT64* result);
+static size_t GetLastSepPos(const std::string& fileName);
+INLINE std::string GetDirPath(const std::string& fileName);
+INLINE std::string GetFileTitle(const std::string& fileName);
+static void CreateDirTree(const std::string& dirPath);
 
 
 static CLI::Option_group* CLI_AddInputFileGroup(CLI::App* app, std::vector<std::string>& wavNames, std::string& wavList)
@@ -56,10 +61,9 @@ int main(int argc, char* argv[])
 	std::vector<std::string> wavFileNames;
 	std::string wavFileList;
 	std::string splitFileName;
-	std::string dstPath;
-	bool noGain;
-	bool out16Bit;
 	DetectOpts detOpts = {-81.64, -85.15, 3.0};
+	TrimOpts trimOpts = {false, false};
+	SplitOpts splitOpts = {".", 0, 0};
 	
 	cliApp.require_subcommand();
 	
@@ -78,20 +82,27 @@ int main(int argc, char* argv[])
 	
 	CLI::App* scSplit = cliApp.add_subcommand("split", "split into multiple files");
 	CLI_AddInputFileGroup(scSplit, wavFileNames, wavFileList);
-	scSplit->add_option("-s, --split", splitFileName, "TXT file that lists split points")->check(CLI::ExistingFile)->required();
-	scSplit->add_option("-G, --no-gain", noGain, "ignore split list gain");
-	scSplit->add_option("-1, --force-16b", out16Bit, "enforce 16-bit output");
-	scSplit->add_option("-o, --output-path", dstPath, "output path");
-	
+	scSplit->add_option("-t, --trim-list", splitFileName, "TXT file that lists trim points and file names")->check(CLI::ExistingFile)->required();
+	scSplit->add_flag("-g, --apply-gain", trimOpts.applyGain, "apply trim list gain (ignored by default)");
+	scSplit->add_flag("-1, --force-16b", trimOpts.force16bit, "enforce 16-bit output");
+	scSplit->add_option("-o, --output-path", splitOpts.dstPath, "output path");
+	scSplit->add_option("-b, --begin-silence", splitOpts.leadSamples, "additional leading samples of silence");
+	scSplit->add_option("-e, --end-silence", splitOpts.trailSamples, "additional trailing samples of silence");
+
 	CLI11_PARSE(cliApp, argc, argv);
 	
 	if (! wavFileList.empty())
 	{
-		wavFileNames = ReadFileIntoStrVector(wavFileList);
-		if (wavFileNames.empty())
+		UINT8 retVal = ReadFileIntoStrVector(wavFileList, wavFileNames);
+		if (retVal & 0x80)
 		{
-			printf("Failed to load WAV list or list is empty!\n");
+			printf("Failed to load WAV list!\n");
 			return 1;
+		}
+		else if (wavFileNames.empty())
+		{
+			printf("WAV list is empty!\n");
+			return 2;
 		}
 	}
 	
@@ -120,7 +131,7 @@ int main(int argc, char* argv[])
 		if (! (mwf.GetBitDepth() == 16 || mwf.GetBitDepth() == 24))
 		{
 			printf("Unsupported bit depth: %u\n", mwf.GetBitDepth());
-			printf("Only 16 and 24 bit are supported.\n");
+			printf("Only 16 and 24 bit WAVs are supported.\n");
 			return 4;
 		}
 		
@@ -147,12 +158,13 @@ int main(int argc, char* argv[])
 		MultiWaveFile mwf;
 		UINT8 retVal;
 		
-		splitNames = ReadFileIntoStrVector(splitFileName);
-		if (splitNames.empty())
+		retVal = ReadFileIntoStrVector(splitFileName, splitNames);
+		if (retVal & 0x80)
 		{
-			printf("Failed to split name list or list is empty!\n");
+			printf("Failed to load split name list!\n");
 			return 1;
 		}
+		// An empty list is valid in this case.
 		if ((detOpts.ampSplit < 0.0 && detOpts.ampFinetune < 0.0) ||
 			(detOpts.ampSplit > 0.0 && detOpts.ampFinetune > 0.0))
 		{
@@ -164,7 +176,7 @@ int main(int argc, char* argv[])
 		}
 		
 		printf("Detect Split Points\n");
-		printf("--------------------\n");
+		printf("-------------------\n");
 		
 		retVal = mwf.LoadWaveFiles(wavFileNames);
 		if (retVal)
@@ -181,7 +193,7 @@ int main(int argc, char* argv[])
 		if (mwf.GetBitDepth() != 24)
 		{
 			printf("Unsupported bit depth: %u\n", mwf.GetBitDepth());
-			printf("Only 16 and 24 bit are supported.\n");
+			printf("Only 24 bit WAVs are supported.\n");
 			return 4;
 		}
 		
@@ -189,39 +201,134 @@ int main(int argc, char* argv[])
 	}
 	else if (cliApp.got_subcommand(scSplit))
 	{
+		std::vector<std::string> splitNames;
+		MultiWaveFile mwf;
+		UINT8 retVal;
+		
+		retVal = ReadFileIntoStrVector(splitFileName, splitNames);
+		if (retVal & 0x80)
+		{
+			printf("Failed to load trim list!\n");
+			return 1;
+		}
+		else if (splitNames.empty())
+		{
+			printf("Trim list is empty!\n");
+			return 2;
+		}
+		
+		if (!splitOpts.dstPath.empty())
+		{
+			std::string& dstPath = splitOpts.dstPath;
+#ifdef _WIN32
+			std::replace_if(dstPath.begin(), dstPath.end(), [](char c){ return c == '\\'; }, '/');	// '\\' -> '/'
+#endif
+			if (dstPath.back() != '/')
+				dstPath.push_back('/');
+		}
+		
 		printf("Split Files\n");
+		printf("-----------\n");
+		
+		retVal = mwf.LoadWaveFiles(wavFileNames);
+		if (retVal)
+		{
+			printf("WAVE Loading failed!\n");
+			return 3;
+		}
+		if (mwf.GetCompression() != WAVE_FORMAT_PCM)
+		{
+			printf("Unsupported compression type: %u\n", mwf.GetCompression());
+			printf("Only uncompressed PCM is supported.\n");
+			return 4;
+		}
+		if (! (mwf.GetBitDepth() == 16 || mwf.GetBitDepth() == 24))
+		{
+			printf("Unsupported bit depth: %u\n", mwf.GetBitDepth());
+			printf("Only 16 and 24 bit WAVs are supported.\n");
+			return 4;
+		}
+		
+		return DoSplitFiles(mwf, splitNames, splitOpts, trimOpts);
 	}
 	
 	return 0;
 }
 
-// --- utility functions ---
-INLINE INT16 ReadLE16s(const UINT8* data)
+static UINT8 DoSplitFiles(MultiWaveFile& mwf, const std::vector<std::string>& tlLines, const SplitOpts& splitOpts, const TrimOpts& trimOpts)
 {
-	return ((INT8)data[0x01] << 8) | (data[0x00] << 0);
+	std::vector<TrimInfo> trimList;
+	size_t curFile;
+	std::vector<double> chnGain(mwf.GetChannels(), 0.0);
+	
+	for (curFile = 0; curFile < tlLines.size(); curFile ++)
+	{
+		const std::string& tLine = tlLines[curFile];
+		size_t colPos[8];
+		size_t curCol;
+		double num;
+		char* endPtr;
+		
+		colPos[0] = 0;
+		for (curCol = 1; curCol < 4; curCol ++)
+		{
+			size_t spcPos = tLine.find(' ', colPos[curCol - 1]);
+			if (spcPos == std::string::npos)
+				break;
+			colPos[curCol] = spcPos + 1;
+		}
+		
+		num = strtod(&tLine[colPos[0]], &endPtr);
+		if (endPtr != &tLine[colPos[0]])	// first value is a number? (with sign)
+		{
+			if (curCol < 4)
+			{
+				printf("Invalid line: %s\n", tLine.c_str());
+				continue;
+			}
+			TrimInfo ti;
+			ti.gain = num;
+			ti.smplStart = (UINT64)strtoull(&tLine[colPos[1]], NULL, 0);
+			if (ti.smplStart >= splitOpts.leadSamples)
+				ti.smplStart -= splitOpts.leadSamples;
+			else
+				ti.smplStart = 0;
+			ti.smplEnd = (UINT64)strtoull(&tLine[colPos[2]], NULL, 0);
+			ti.smplEnd += splitOpts.trailSamples;
+			ti.fileName = tLine.substr(colPos[3]);
+			ti.chnGain = chnGain;
+			trimList.push_back(ti);
+		}
+		else if (tLine[0] == 'b')	// balance
+		{
+			UINT16 curChn;
+			for (curChn = 0; curChn < chnGain.size() && (1U + curChn) < curCol; curChn ++)
+				chnGain[curChn] = atof(&tLine[colPos[1 + curChn]]);
+			for (; curChn < chnGain.size(); curChn ++)
+				chnGain[curChn] = 0.0;
+		}
+	}
+	
+	for (curFile = 0; curFile < trimList.size(); curFile ++)
+	{
+		TrimInfo& ti = trimList[curFile];
+		std::string fullPath;
+		UINT8 retVal;
+		
+		fullPath = splitOpts.dstPath + ti.fileName;
+		CreateDirTree(GetDirPath(fullPath));
+		
+		printf("Writing %s ...\n", ti.fileName.c_str());
+		ti.fileName = fullPath;
+		retVal = DoWaveTrim(mwf, ti, trimOpts);
+		if (retVal)
+			printf("Error creating %s!\n", fullPath.c_str());
+	}
+	
+	return 0;
 }
 
-INLINE void WriteLE16s(UINT8* data, INT16 value)
-{
-	data[0x00] = (value >> 0) & 0xFF;
-	data[0x01] = (value >> 8) & 0xFF;
-	return;
-}
-
-INLINE INT32 ReadLE24s(const UINT8* data)
-{
-	return ((INT8)data[0x02] << 16) | (data[0x01] <<  8) | (data[0x00] <<  0);
-}
-
-INLINE void WriteLE24s(UINT8* data, INT32 value)
-{
-	data[0x00] = (value >>  0) & 0xFF;
-	data[0x01] = (value >>  8) & 0xFF;
-	data[0x02] = (value >> 16) & 0xFF;
-	return;
-}
-
-static std::vector<std::string> ReadFileIntoStrVector(const std::string& fileName)
+static UINT8 ReadFileIntoStrVector(const std::string& fileName, std::vector<std::string>& result)
 {
 	FILE* hFile;
 	std::vector<std::string> lines;
@@ -231,9 +338,10 @@ static std::vector<std::string> ReadFileIntoStrVector(const std::string& fileNam
 	if (hFile == NULL)
 	{
 		//printf("Error opening file!\n");
-		return std::vector<std::string>();
+		return 0xFF;
 	}
 	
+	result.clear();
 	while(! feof(hFile) && ! ferror(hFile))
 	{
 		tempStr.resize(0x200);
@@ -245,11 +353,11 @@ static std::vector<std::string> ReadFileIntoStrVector(const std::string& fileNam
 		while(! tempStr.empty() && iscntrl((UINT8)tempStr.back()))
 			tempStr.pop_back();
 		
-		lines.push_back(tempStr);
+		result.push_back(tempStr);
 	}
 	
 	fclose(hFile);
-	return lines;
+	return 0x00;
 }
 
 static UINT8 TimeStr2Sample(const char* time, UINT32 sampleRate, UINT64* result)
@@ -293,4 +401,44 @@ static UINT8 TimeStr2Sample(const char* time, UINT32 sampleRate, UINT64* result)
 		*result = sec_total * sampleRate + (UINT64)((s - sf) * sampleRate + 0.5);
 		return 0x00;
 	}
+}
+
+static size_t GetLastSepPos(const std::string& fileName)
+{
+	size_t sepPos;
+	size_t wSepPos;	// Windows separator
+	
+	sepPos = fileName.rfind('/');
+	wSepPos = fileName.rfind('\\');
+	if (wSepPos == std::string::npos)
+		return sepPos;
+	else if (sepPos == std::string::npos)
+		return wSepPos;
+	return (wSepPos > sepPos) ? wSepPos : sepPos;
+}
+
+INLINE std::string GetDirPath(const std::string& fileName)
+{
+	size_t sepPos = GetLastSepPos(fileName);
+	return (sepPos == std::string::npos) ? "" : fileName.substr(0, sepPos + 1);
+}
+
+INLINE std::string GetFileTitle(const std::string& fileName)
+{
+	size_t sepPos = GetLastSepPos(fileName);
+	return (sepPos == std::string::npos) ? fileName : fileName.substr(sepPos + 1);
+}
+
+static void CreateDirTree(const std::string& dirPath)
+{
+	size_t dirSepPos;
+	
+	dirSepPos = dirPath.find('/');
+	while(dirSepPos != std::string::npos)
+	{
+		MakeDir(dirPath.substr(0, dirSepPos).c_str());
+		dirSepPos = dirPath.find('/', dirSepPos + 1);
+	}
+	
+	return;
 }

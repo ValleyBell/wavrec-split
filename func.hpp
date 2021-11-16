@@ -19,4 +19,20 @@ struct DetectOpts
 };
 int DoSplitDetection(MultiWaveFile& mwf, const std::vector<std::string>& fileNameList, const DetectOpts& opts);
 
+// Splitting/Trimming
+struct TrimOpts
+{
+	bool force16bit;	// output 16-bit WAV even for 24-bit input
+	bool applyGain;		// enable applying gain
+};
+struct TrimInfo
+{
+	std::string fileName;
+	UINT64 smplStart;
+	UINT64 smplEnd;
+	double gain;	// global track gain (in db)
+	std::vector<double> chnGain;	// additional per-channel gain (in db)
+};
+UINT8 DoWaveTrim(MultiWaveFile& mwf, const TrimInfo& trim, const TrimOpts& opts);
+
 #endif	// __FUNC_HPP__

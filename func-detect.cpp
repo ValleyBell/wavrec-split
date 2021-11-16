@@ -3,13 +3,16 @@
 #include <math.h>
 #include <vector>
 #include <string>
-#include <algorithm>	// for std::min()
 
 #include "stdtype.h"
 #include "MultiWaveFile.hpp"
 #include "func.hpp"
 
 #define INLINE	static inline
+
+#ifndef M_LN2
+#define M_LN2	0.693147180559945309417
+#endif
 
 struct SplitListItem
 {
@@ -20,32 +23,15 @@ struct SplitListItem
 };
 
 
-INLINE INT16 ReadLE16s(const UINT8* data);
 INLINE INT32 ReadLE24s(const UINT8* data);
 INLINE INT32 MaxVal_SampleBits(UINT8 bits);
 INLINE double Linear2DB(double scale);
 INLINE double DB2Linear(double db);
 INLINE INT32 OptAmplitude2Sample(double optVal, UINT32 maxSmplVal);
+INLINE UINT64 RoundDownToUnit(UINT64 val, UINT64 unit);
+static INT32 GetMaxSample24(const UINT8* buffer, UINT16 chnCnt);
 static std::string GetTimeStrHMS(UINT32 smplRate, UINT64 smplPos);
 
-
-static INT32 GetMaxSample24(const UINT8* buffer, UINT16 chnCnt)
-{
-	INT32 maxVal = ReadLE24s(&buffer[0]);
-	for (UINT16 curChn = 1; curChn < chnCnt; curChn ++)
-	{
-		INT32 smplVal = ReadLE24s(&buffer[curChn * 3]);
-		if (abs(smplVal) > abs(maxVal))
-			maxVal = smplVal;
-	}
-	
-	return maxVal;
-}
-
-static UINT64 RoundDownToUnit(UINT64 val, UINT64 unit)
-{
-	return (val / unit) * unit;
-}
 
 static void FinetuneTrimPoint(MultiWaveFile& mwf, SplitListItem& sli, INT32 silenceVal)
 {
@@ -278,11 +264,6 @@ int DoSplitDetection(MultiWaveFile& mwf, const std::vector<std::string>& fileNam
 	return 0;
 }
 
-INLINE INT16 ReadLE16s(const UINT8* data)
-{
-	return ((INT8)data[0x01] << 8) | (data[0x00] << 0);
-}
-
 INLINE INT32 ReadLE24s(const UINT8* data)
 {
 	return ((INT8)data[0x02] << 16) | (data[0x01] <<  8) | (data[0x00] <<  0);
@@ -310,6 +291,24 @@ INLINE INT32 OptAmplitude2Sample(double optVal, UINT32 maxSmplVal)
 		return (INT32)optVal;
 	else
 		return (INT32)(DB2Linear(optVal) * maxSmplVal);
+}
+
+INLINE UINT64 RoundDownToUnit(UINT64 val, UINT64 unit)
+{
+	return (val / unit) * unit;
+}
+
+static INT32 GetMaxSample24(const UINT8* buffer, UINT16 chnCnt)
+{
+	INT32 maxVal = ReadLE24s(&buffer[0]);
+	for (UINT16 curChn = 1; curChn < chnCnt; curChn ++)
+	{
+		INT32 smplVal = ReadLE24s(&buffer[curChn * 3]);
+		if (abs(smplVal) > abs(maxVal))
+			maxVal = smplVal;
+	}
+	
+	return maxVal;
 }
 
 static std::string GetTimeStrHMS(UINT32 smplRate, UINT64 smplPos)

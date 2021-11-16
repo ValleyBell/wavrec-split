@@ -79,6 +79,7 @@
   <ItemGroup>
     <ClCompile Include="func-detect.cpp" />
     <ClCompile Include="func-magstat.cpp" />
+    <ClCompile Include="func-split.cpp" />
     <ClCompile Include="MultiWaveFile.cpp" />
     <ClCompile Include="wavrec-split.cpp" />
   </ItemGroup>
