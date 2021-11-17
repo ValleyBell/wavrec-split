@@ -68,7 +68,7 @@ static void FinetuneTrimPoint(MultiWaveFile& mwf, SplitListItem& sli, INT32 sile
 		}
 		
 		curSmpl = (UINT32)readSmpls - 1;
-		src = smplBuf.data() + (curSmpl * smplSize);
+		src = &smplBuf[curSmpl * smplSize];
 		maxVal = GetMaxSample24(src, chnCnt);
 		initSign = (maxVal < 0) ? -1 : 0;
 		while(curSmpl > 0)
@@ -98,7 +98,7 @@ static void FinetuneTrimPoint(MultiWaveFile& mwf, SplitListItem& sli, INT32 sile
 	
 	{
 		// algorithm for End Point:
-		//	1. start at sli.smplStart, read up to 1 second forward
+		//	1. start at sli.smplEnd, read up to 4 seconds forward (see buffer size)
 		//	2. make average of all samples for each 1/10 second block
 		//	3. stop when "block average" gets larger
 		UINT16 curChn;
@@ -127,7 +127,7 @@ static void FinetuneTrimPoint(MultiWaveFile& mwf, SplitListItem& sli, INT32 sile
 			if (blkBaseSmpl + blkSmpls > readSmpls)
 				blkSmpls = (UINT32)(readSmpls - blkBaseSmpl);
 			
-			src = smplBuf.data() + (blkBaseSmpl * smplSize);
+			src = &smplBuf[blkBaseSmpl * smplSize];
 			INT64 blkSmplAcc = 0;
 			for (curSmpl = 0; curSmpl < blkSmpls; curSmpl ++, src += smplSize)
 			{
@@ -249,8 +249,9 @@ int DoSplitDetection(MultiWaveFile& mwf, const std::vector<std::string>& fileNam
 		sli.smplEnd = songSmplEnd;
 		sli.gain = maxSmplVal / (double)smplValRange;
 		sli.fileName = (songID < fileNameList.size()) ? fileNameList[songID] : "";
-		printf("Song %u: %s .. %s %s\n", songID, GetTimeStrHMS(smplRate, sli.smplStart).c_str(),
-			GetTimeStrHMS(smplRate, sli.smplEnd).c_str(), sli.fileName.c_str());
+		printf("Song %u: %s .. %s len %s  %s\n", songID, GetTimeStrHMS(smplRate, sli.smplStart).c_str(),
+			GetTimeStrHMS(smplRate, sli.smplEnd).c_str(),
+			GetTimeStrMS(smplRate, sli.smplEnd - sli.smplStart).c_str(), sli.fileName.c_str());
 		splitList.push_back(sli);
 	}
 	

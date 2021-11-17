@@ -51,6 +51,7 @@ This can be useful for processing large amounts of songs recorded from video gam
    ```
 
    The "gain" (value in db) is the maximum volume boost you can apply to the song without clipping.
+   (Except that rounding the value to 3 decimal digits can cause micro-clipping later.)
 
    This list is what you will use with the `split` command.
 
@@ -87,6 +88,24 @@ A song ends with the begining of a block of "silence".
 However in order to reduce the amount of false positives, surpassing the threshold for less than 10 samples does NOT result in a new song.
 This instead generates the `Outlier at X` message.
 
-#### Fine-tuning
+#### Start Point Fine-tuning
 
-TODO
+1. begin at start point from coarse scan
+2. take note of the sign (positive/negative) of the sample value at the start point
+3. search backwards until a sample value is reached that fullfills both of these conditions:
+
+   - has the opposite sign of the sample at the coarse start point
+   - is louder than (`amp-fine` - 12 db)
+
+4. finally search forward until the sign of the waveform changes again
+   (and thus matches the sign of the coarse start point sample)
+
+The purpose of the start point fine-tuning is to capture the full "swing-in" curve of the first tone.
+
+#### End Point Fine-tuning
+
+1. begin at (end point from coarse scan - 100 ms)
+2. for each block of 100 ms, calculate the average amplitude of all samples
+3. When a block's average amplitude is larger than the one of the previous block:
+   Stop: The fine-tuned end point is the beginning of this block.
+4. Else continue searching for up to 4 seconds.

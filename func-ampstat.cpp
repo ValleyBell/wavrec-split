@@ -35,6 +35,7 @@ int DoAmplitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplDurat, UIN
 	std::vector<UINT64> smplMaxPos;
 	std::vector< INT32> smplMinVal;
 	std::vector<UINT64> smplMinPos;
+	bool showIntTime;
 	
 	smplDivide = (double)MaxVal_SampleBits(mwf.GetBitDepth());
 	smplSize = mwf.GetSampleSize();
@@ -47,6 +48,8 @@ int DoAmplitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplDurat, UIN
 	// Note: The buffer size also determines the measurement interval.
 	smplBufSCnt = interval ? interval : (smplRate * 1);	// fallback: buffer of 1 second
 	smplBuf.resize(smplBufSCnt * smplSize);
+	
+	showIntTime = ((smplStart % smplRate) == 0) && ((smplBufSCnt % smplRate) == 0);
 	
 	printf("second");
 	for (curChn = 0; curChn < chnCnt; curChn ++)
@@ -122,7 +125,7 @@ int DoAmplitudeStats(MultiWaveFile& mwf, UINT64 smplStart, UINT64 smplDurat, UIN
 				smplMinVal[curChn], smplMaxVal[curChn], smplDiff, dbMin, dbMax, dbDiff);
 		}
 #else
-		if ((smplPos % smplRate) == 0)
+		if (showIntTime)
 			printf("%u", (unsigned)(smplPos / smplRate));
 		else
 			printf("%.2f", (double)smplPos / smplRate);

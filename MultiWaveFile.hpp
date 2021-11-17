@@ -16,7 +16,7 @@ typedef struct
 	UINT16 nBlockAlign;
 	UINT16 wBitsPerSample;
 	//UINT16 cbSize;	// not required for WAVE_FORMAT_PCM
-} WAVEFORMAT;	// from MSDN Help
+} WAVEFORMAT;	// as specified by mmsystem.h
 #pragma pack()
 
 #define WAVE_FORMAT_PCM			0x0001
