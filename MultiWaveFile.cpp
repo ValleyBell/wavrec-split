@@ -1,3 +1,5 @@
+// Copyright 2021, Valley Bell
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include <vector>
 #include <string>
 #include <stdio.h>

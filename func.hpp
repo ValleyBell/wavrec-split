@@ -1,3 +1,5 @@
+// Copyright 2021, Valley Bell
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef __FUNC_HPP__
 #define __FUNC_HPP__
 

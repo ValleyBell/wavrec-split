@@ -1,3 +1,5 @@
+// Copyright 2021, Valley Bell
+// SPDX-License-Identifier: GPL-2.0-or-later
 #ifndef __MULTIWAVEFILE_HPP__
 #define __MULTIWAVEFILE_HPP__
 

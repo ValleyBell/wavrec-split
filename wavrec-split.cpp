@@ -1,3 +1,5 @@
+// Copyright 2021, Valley Bell
+// SPDX-License-Identifier: GPL-2.0-or-later
 #define _USE_MATH_DEFINES
 #include <stdio.h>
 #include <vector>
