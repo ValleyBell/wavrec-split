@@ -265,6 +265,7 @@ int DoSplitDetection(MultiWaveFile& mwf, const std::vector<std::string>& fileNam
 		SplitListItem& sli = splitList[curFile];
 		FinetuneTrimPoint(mwf, sli, splitSValFine);
 		double gainDB = Linear2DB(sli.gain) * -1;	// invert sign to turn "maximum amplitude" to "gain"
+		gainDB = floor(gainDB * 1000.0) / 1000.0;	// round in such a way that avoids clipping later
 		printf("%.3f %llu %llu %s\n", gainDB, sli.smplStart, sli.smplEnd, sli.fileName.c_str());
 	}
 	

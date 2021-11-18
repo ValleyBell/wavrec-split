@@ -51,7 +51,7 @@ This can be useful for processing large amounts of songs recorded from video gam
    ```
 
    The "gain" (value in db) is the maximum volume boost you can apply to the song without clipping.
-   (Except that rounding the value to 3 decimal digits can cause micro-clipping later.)
+   (Micro-clipping may occour during the optional 24 → 16 bit conversion though.)
 
    This list is what you will use with the `split` command.
 
