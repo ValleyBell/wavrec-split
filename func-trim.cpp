@@ -109,7 +109,7 @@ UINT8 DoWaveTrim(MultiWaveFile& mwf, const TrimInfo& trim, const TrimOpts& opts)
 	}
 	
 	mwf.SetSampleReadOffset(trim.smplStart);
-	smplCnt = trim.smplEnd - trim.smplStart + mwf.GetSampleRate();
+	smplCnt = trim.smplEnd - trim.smplStart;
 	writeSmpls = 0;
 	overflowCnt = 0;
 	while(smplCnt > 0)
