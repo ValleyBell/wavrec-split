@@ -92,6 +92,7 @@ size_t MultiWaveFile::GetFileFromSample(UINT64 sample)
 /*static*/ UINT8 MultiWaveFile::LoadSingleWave(const std::string& fileName, WaveInfo& wi)
 {
 	FILE* hFile;
+	size_t readEl;
 	char chnkFCC[4];
 	UINT32 chnkSize;
 	UINT8 found;
@@ -105,16 +106,16 @@ size_t MultiWaveFile::GetFileFromSample(UINT64 sample)
 		return 0xFF;
 	}
 	
-	fread(chnkFCC, 0x04, 1, hFile);
-	if (memcmp(chnkFCC, "RIFF", 4))
+	readEl = fread(chnkFCC, 0x04, 1, hFile);
+	if (readEl == 0 || memcmp(chnkFCC, "RIFF", 4))
 	{
 		fclose(hFile);
 		fprintf(stderr, "Bad file.\n");
 		return 0xF0;
 	}
 	fseek(hFile, 0x08, SEEK_SET);
-	fread(chnkFCC, 0x04, 1, hFile);
-	if (memcmp(chnkFCC, "WAVE", 4))
+	readEl = fread(chnkFCC, 0x04, 1, hFile);
+	if (readEl == 0 || memcmp(chnkFCC, "WAVE", 4))
 	{
 		fclose(hFile);
 		fprintf(stderr, "Bad file.\n");
@@ -124,8 +125,10 @@ size_t MultiWaveFile::GetFileFromSample(UINT64 sample)
 	found = 0x00;
 	while(! feof(hFile) && ! ferror(hFile))
 	{
-		fread(chnkFCC, 0x04, 1, hFile);
-		fread(&chnkSize, 0x04, 1, hFile);
+		readEl = fread(chnkFCC, 0x04, 1, hFile);
+		readEl += fread(&chnkSize, 0x04, 1, hFile);
+		if (readEl < 2)
+			break;
 		size_t fPos = ftell(hFile);
 		if (! memcmp(chnkFCC, "data", 4))
 		{
@@ -136,7 +139,13 @@ size_t MultiWaveFile::GetFileFromSample(UINT64 sample)
 		else if (! memcmp(chnkFCC, "fmt ", 4))
 		{
 			found |= 0x01;
-			fread(&wi.format, sizeof(WAVEFORMAT), 1, hFile);
+			readEl = fread(&wi.format, sizeof(WAVEFORMAT), 1, hFile);
+			if (readEl == 0)
+			{
+				fclose(hFile);
+				fprintf(stderr, "Error reading format chunk.\n");
+				return 0xFE;
+			}
 		}
 		fseek(hFile, (long)(fPos + chnkSize), SEEK_SET);
 	}

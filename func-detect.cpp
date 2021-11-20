@@ -45,13 +45,13 @@ static void FinetuneTrimPoint(MultiWaveFile& mwf, SplitListItem& sli, INT32 sile
 	size_t readSmpls;
 	UINT16 chnCnt = mwf.GetChannels();
 	UINT64 smplReadOfs;
-	INT32 maxVal;
 	const UINT8* src;
 	UINT32 curSmpl;
 	
 	smplBuf.resize(smplRate * 4 * smplSize);
 	
 	{
+		INT32 maxVal;
 		INT8 initSign;
 		INT8 curSign;
 		
@@ -65,7 +65,7 @@ static void FinetuneTrimPoint(MultiWaveFile& mwf, SplitListItem& sli, INT32 sile
 		readSmpls = mwf.ReadSamples((smplCnt + 1) * smplSize, smplBuf.data());
 		if (! readSmpls)
 		{
-			printf("Error reading samples from offset %llu, count %u!\n", smplReadOfs, smplCnt);
+			printf("Error reading samples from offset %llu, count %u!\n", smplReadOfs, smplCnt + 1);
 			return;
 		}
 		
@@ -78,17 +78,17 @@ static void FinetuneTrimPoint(MultiWaveFile& mwf, SplitListItem& sli, INT32 sile
 			curSmpl --;	src -= smplSize;
 			maxVal = GetMaxSample24(src, chnCnt);
 			curSign = (maxVal < 0) ? -1 : 0;
-			
 			if (curSign != initSign && abs(maxVal) >= (silenceVal / 4))
+			{
+				initSign = curSign;
 				break;	// found [opposite sign + level >= (silenceVal / 4)]
+			}
 		}
-		initSign = curSign;
 		
 		for (; curSmpl < readSmpls - 1; curSmpl ++, src += smplSize)
 		{
 			maxVal = GetMaxSample24(src, chnCnt);
 			curSign = (maxVal < 0) ? -1 : 0;
-			
 			if (curSign != initSign)
 			{
 				//printf("Trim Adjustment - Start: %llu -> %llu\n", sli.smplStart, smplReadOfs + curSmpl);
@@ -117,7 +117,7 @@ static void FinetuneTrimPoint(MultiWaveFile& mwf, SplitListItem& sli, INT32 sile
 		readSmpls = mwf.ReadSamples(smplBuf.size(), smplBuf.data());
 		if (! readSmpls)
 		{
-			printf("Error reading samples from offset %llu, count %u!\n", smplReadOfs, smplCnt);
+			printf("Error reading samples from offset %llu, count %zu!\n", smplReadOfs, smplBuf.size() / smplSize);
 			return;
 		}
 		

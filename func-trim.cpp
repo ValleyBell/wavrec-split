@@ -182,7 +182,7 @@ UINT8 DoWaveTrim(MultiWaveFile& mwf, const TrimInfo& trim, const TrimOpts& opts)
 		smplCnt -= readSmpls;
 	}
 	if (overflowCnt > 0)
-		printf("Warning! Clipped %u samples due to overflow\n", overflowCnt);
+		printf("Warning! Clipped %zu samples due to overflow\n", overflowCnt);
 	
 	{
 		UINT32 chnkLen = (UINT32)(writeSmpls * smplSizeD);

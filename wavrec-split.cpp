@@ -6,6 +6,7 @@
 #include <string>
 #include <algorithm>
 #include <math.h>
+#include <string.h>
 
 #include "stdtype.h"
 #include "MultiWaveFile.hpp"
@@ -36,7 +37,9 @@ struct SplitOpts
 	UINT32 trailSamples;
 };
 
-static UINT8 DoSplitFiles(MultiWaveFile& mwf, const std::vector<std::string>& tlLines, const SplitOpts& splitOpts, const TrimOpts& trimOpts);
+static UINT8 ParseTrimList(const std::vector<std::string>& tlLines, std::vector<TrimInfo>& result);
+static UINT8 DoSplitFiles(MultiWaveFile& mwf, const std::vector<TrimInfo>& trimList, const SplitOpts& splitOpts, const TrimOpts& trimOpts);
+static UINT8 DoConvert(const std::vector<TrimInfo>& trimList, const SplitOpts& splitOpts, const TrimOpts& trimOpts);
 static UINT8 ReadFileIntoStrVector(const std::string& fileName, std::vector<std::string>& result);
 static UINT8 TimeStr2Sample(const char* time, UINT32 sampleRate, UINT64* result);
 static size_t GetLastSepPos(const std::string& fileName);
@@ -90,7 +93,13 @@ int main(int argc, char* argv[])
 	scSplit->add_option("-o, --output-path", splitOpts.dstPath, "output path");
 	scSplit->add_option("-b, --begin-silence", splitOpts.leadSamples, "additional leading samples of silence");
 	scSplit->add_option("-e, --end-silence", splitOpts.trailSamples, "additional trailing samples of silence");
-
+	
+	CLI::App* scConvert = cliApp.add_subcommand("convert", "apply volume gain and/or convert 24->16 bit");
+	scConvert->add_option("-t, --trim-list", splitFileName, "TXT file that lists trim points and file names")->check(CLI::ExistingFile)->required();
+	scConvert->add_flag("-g, --apply-gain", trimOpts.applyGain, "apply trim list gain (ignored by default)");
+	scConvert->add_flag("-1, --force-16b", trimOpts.force16bit, "enforce 16-bit output");
+	scConvert->add_option("-o, --output-path", splitOpts.dstPath, "output path");
+	
 	CLI11_PARSE(cliApp, argc, argv);
 	
 	if (! wavFileList.empty())
@@ -203,17 +212,19 @@ int main(int argc, char* argv[])
 	}
 	else if (cliApp.got_subcommand(scSplit))
 	{
-		std::vector<std::string> splitNames;
+		std::vector<std::string> splitLines;
+		std::vector<TrimInfo> trimList;
 		MultiWaveFile mwf;
 		UINT8 retVal;
 		
-		retVal = ReadFileIntoStrVector(splitFileName, splitNames);
+		retVal = ReadFileIntoStrVector(splitFileName, splitLines);
 		if (retVal & 0x80)
 		{
 			fprintf(stderr, "Failed to load trim list!\n");
 			return 1;
 		}
-		else if (splitNames.empty())
+		ParseTrimList(splitLines, trimList);
+		if (trimList.empty())
 		{
 			fprintf(stderr, "Trim list is empty!\n");
 			return 2;
@@ -251,28 +262,57 @@ int main(int argc, char* argv[])
 			return 4;
 		}
 		
-		return DoSplitFiles(mwf, splitNames, splitOpts, trimOpts);
+		return DoSplitFiles(mwf, trimList, splitOpts, trimOpts);
+	}
+	else if (cliApp.got_subcommand(scConvert))
+	{
+		std::vector<std::string> splitLines;
+		std::vector<TrimInfo> trimList;
+		UINT8 retVal;
+		
+		retVal = ReadFileIntoStrVector(splitFileName, splitLines);
+		if (retVal & 0x80)
+		{
+			fprintf(stderr, "Failed to load trim list!\n");
+			return 1;
+		}
+		
+		if (!splitOpts.dstPath.empty())
+		{
+			std::string& dstPath = splitOpts.dstPath;
+#ifdef _WIN32
+			std::replace_if(dstPath.begin(), dstPath.end(), [](char c){ return c == '\\'; }, '/');	// '\\' -> '/'
+#endif
+			if (dstPath.back() != '/')
+				dstPath.push_back('/');
+		}
+		
+		fprintf(stderr, "Convert Files\n");
+		fprintf(stderr, "-------------\n");
+		
+		ParseTrimList(splitLines, trimList);
+		return DoConvert(trimList, splitOpts, trimOpts);
 	}
 	
 	return 0;
 }
 
-static UINT8 DoSplitFiles(MultiWaveFile& mwf, const std::vector<std::string>& tlLines, const SplitOpts& splitOpts, const TrimOpts& trimOpts)
+static UINT8 ParseTrimList(const std::vector<std::string>& tlLines, std::vector<TrimInfo>& result)
 {
-	std::vector<TrimInfo> trimList;
-	size_t curFile;
-	std::vector<double> chnGain(mwf.GetChannels(), 0.0);
+	size_t curLine;
+	std::vector<double> chnGain;
 	
-	for (curFile = 0; curFile < tlLines.size(); curFile ++)
+	result.clear();
+	for (curLine = 0; curLine < tlLines.size(); curLine ++)
 	{
-		const std::string& tLine = tlLines[curFile];
+		const std::string& tLine = tlLines[curLine];
 		size_t colPos[8];
 		size_t curCol;
 		double num;
 		char* endPtr;
 		
 		colPos[0] = 0;
-		for (curCol = 1; curCol < 4; curCol ++)
+		for (curCol = 1; curCol < 8; curCol ++)
 		{
 			size_t spcPos = tLine.find(' ', colPos[curCol - 1]);
 			if (spcPos == std::string::npos)
@@ -291,44 +331,99 @@ static UINT8 DoSplitFiles(MultiWaveFile& mwf, const std::vector<std::string>& tl
 			TrimInfo ti;
 			ti.gain = num;
 			ti.smplStart = (UINT64)strtoull(&tLine[colPos[1]], NULL, 0);
-			if (ti.smplStart >= splitOpts.leadSamples)
-				ti.smplStart -= splitOpts.leadSamples;
-			else
-				ti.smplStart = 0;
 			ti.smplEnd = (UINT64)strtoull(&tLine[colPos[2]], NULL, 0);
-			ti.smplEnd += splitOpts.trailSamples;
 			ti.fileName = tLine.substr(colPos[3]);
 			ti.chnGain = chnGain;
-			trimList.push_back(ti);
+			result.push_back(ti);
 		}
 		else if (tLine[0] == 'b')	// balance
 		{
-			UINT16 curChn;
-			for (curChn = 0; curChn < chnGain.size() && (1U + curChn) < curCol; curChn ++)
-				chnGain[curChn] = atof(&tLine[colPos[1 + curChn]]);
-			for (; curChn < chnGain.size(); curChn ++)
-				chnGain[curChn] = 0.0;
+			size_t chnCol;
+			chnGain.clear();
+			for (chnCol = 1; chnCol < curCol; chnCol ++)
+				chnGain.push_back(atof(&tLine[colPos[chnCol]]));
 		}
 	}
 	
+	return 0x00;
+}
+
+static UINT8 DoSplitFiles(MultiWaveFile& mwf, const std::vector<TrimInfo>& trimList, const SplitOpts& splitOpts, const TrimOpts& trimOpts)
+{
+	size_t curFile;
+	
 	for (curFile = 0; curFile < trimList.size(); curFile ++)
 	{
-		TrimInfo& ti = trimList[curFile];
-		std::string fullPath;
+		TrimInfo ti = trimList[curFile];
+		const std::string& fileName = trimList[curFile].fileName;	// original file name
 		UINT8 retVal;
 		
-		fullPath = splitOpts.dstPath + ti.fileName;
-		CreateDirTree(GetDirPath(fullPath));
+		if (ti.smplStart >= splitOpts.leadSamples)
+			ti.smplStart -= splitOpts.leadSamples;
+		else
+			ti.smplStart = 0;
+		ti.smplEnd += splitOpts.trailSamples;
 		
-		fprintf(stderr, "Writing %s ...\n", ti.fileName.c_str());
-		ti.fileName = fullPath;
+		ti.fileName = splitOpts.dstPath + fileName;
+		CreateDirTree(GetDirPath(ti.fileName));
+		
+		fprintf(stderr, "Writing %s ...\n", fileName.c_str());
 		retVal = DoWaveTrim(mwf, ti, trimOpts);
 		if (retVal)
-			fprintf(stderr, "Error creating %s!\n", fullPath.c_str());
+			fprintf(stderr, "Error creating %s!\n", ti.fileName.c_str());
 	}
 	
 	return 0;
 }
+
+static UINT8 DoConvert(const std::vector<TrimInfo>& trimList, const SplitOpts& splitOpts, const TrimOpts& trimOpts)
+{
+	std::vector<std::string> tempFileList(1);
+	MultiWaveFile mwf;
+	size_t curFile;
+	
+	for (curFile = 0; curFile < trimList.size(); curFile ++)
+	{
+		TrimInfo ti = trimList[curFile];
+		const std::string& fileName = trimList[curFile].fileName;	// original file name
+		UINT8 retVal;
+		
+		fprintf(stderr, "Processing %s ...\n", fileName.c_str());
+		
+		tempFileList[0] = fileName;
+		retVal = mwf.LoadWaveFiles(tempFileList);
+		if (retVal)
+		{
+			fprintf(stderr, "WAVE Loading failed!\n");
+			continue;
+		}
+		if (mwf.GetCompression() != WAVE_FORMAT_PCM)
+		{
+			fprintf(stderr, "Unsupported compression type: %u\n", mwf.GetCompression());
+			fprintf(stderr, "Only uncompressed PCM is supported.\n");
+			continue;
+		}
+		if (! (mwf.GetBitDepth() == 16 || mwf.GetBitDepth() == 24))
+		{
+			fprintf(stderr, "Unsupported bit depth: %u\n", mwf.GetBitDepth());
+			fprintf(stderr, "Only 16 and 24 bit WAVs are supported.\n");
+			continue;
+		}
+		
+		ti.smplStart = 0;
+		ti.smplEnd = mwf.GetTotalSamples();
+		
+		ti.fileName = splitOpts.dstPath + fileName;
+		CreateDirTree(GetDirPath(ti.fileName));
+		
+		retVal = DoWaveTrim(mwf, ti, trimOpts);
+		if (retVal)
+			fprintf(stderr, "Error creating %s!\n", ti.fileName.c_str());
+	}
+	
+	return 0;
+}
+
 
 static UINT8 ReadFileIntoStrVector(const std::string& fileName, std::vector<std::string>& result)
 {
